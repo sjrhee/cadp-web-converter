@@ -42,10 +42,6 @@ CADP_POLICY=default_policy
 # 실행 권한 부여 (최초 1회)
 chmod +x build_and_run.sh stop.sh
 
-```bash
-# 실행 권한 부여 (최초 1회)
-chmod +x build_and_run.sh stop.sh
-
 # 빌드 및 백그라운드 실행
 ./build_and_run.sh
 # 로그 확인: tail -f server.log
@@ -80,8 +76,8 @@ Windows 서버에서 애플리케이션을 실행하고, 외부(다른 PC)에서
 **관리자 권한**으로 PowerShell 또는 명령 프롬프트를 실행한 후 아래 명령어를 입력하세요.
 
 ```powershell
-# 포트 포워딩 규칙 추가 (모든 IP의 8088 포트를 로컬호스트 8088로 연결)
-netsh interface portproxy add v4tov4 listenport=8088 listenaddress=0.0.0.0 connectport=8088 connectaddress=127.0.0.1
+# 포트 포워딩 규칙 추가 (모든 IP의 8088 포트를 해당 리눅스 VM IP 192.168.100.13의 8088로 연결)
+netsh interface portproxy add v4tov4 listenport=8088 listenaddress=0.0.0.0 connectport=8088 connectaddress=192.168.100.13
 
 # 설정 확인
 netsh interface portproxy show all

@@ -37,3 +37,4 @@ cadp_upload/
 .env
 .env.local
 .DS_Store
+app.pid
