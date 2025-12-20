@@ -12,7 +12,7 @@ Thales CADP SDK를 사용하여 구분자가 있는 파일(CSV, TSV, TXT)을 일
 
 ## 필수 요구 사항
 
-- Java 17 이상
+- Java 11 이상
 - Maven
 - Thales CADP SDK for Java
 
