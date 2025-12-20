@@ -40,10 +40,13 @@ CADP_POLICY=default_policy
 
 ```bash
 # 실행 권한 부여 (최초 1회)
-chmod +x build_and_run.sh
+chmod +x build_and_run.sh stop.sh
 
 # 빌드 및 실행
 ./build_and_run.sh
+
+# 실행 중지
+./stop.sh
 ```
 
 애플리케이션이 정상적으로 실행되면 브라우저에서 `http://192.168.100.13:8088`로 접속할 수 있습니다.
