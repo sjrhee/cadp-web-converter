@@ -16,6 +16,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
 import java.util.UUID;
@@ -68,7 +69,7 @@ public class WebConverterController {
     public ResponseEntity<Map<String, String>> processFile(
             @RequestParam("file") MultipartFile file,
             @RequestParam("mode") String mode,
-            @RequestParam("column") int column,
+            @RequestParam("columns") List<Integer> columns,
             @RequestParam("policy") String policy,
             @RequestParam(value = "delimiter", defaultValue = ",") String delimiter,
             @RequestParam(value = "skipHeader", defaultValue = "false") boolean skipHeader,
@@ -92,7 +93,7 @@ public class WebConverterController {
             long startTime = System.currentTimeMillis();
             java.time.LocalDateTime startDateTime = java.time.LocalDateTime.now();
 
-            File resultFile = fileProcessingService.processFileWithConfig(file, mode, column, policy, delimiter, skipHeader, config);
+            File resultFile = fileProcessingService.processFileWithConfig(file, mode, columns, policy, delimiter, skipHeader, config);
             
             // End Timer
             long endTime = System.currentTimeMillis();

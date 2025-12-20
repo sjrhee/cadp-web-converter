@@ -7,7 +7,10 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ExecutionException;
 
 @Service
 public class FileProcessingService {
@@ -49,15 +52,15 @@ public class FileProcessingService {
         return preview;
     }
 
-    public File processFileWithConfig(MultipartFile file, String mode, int columnIndex, String policy, String delimiter, boolean skipHeader, com.cadp.web.dto.CadpConfig config) throws Exception {
+    public File processFileWithConfig(MultipartFile file, String mode, List<Integer> columnIndices, String policy, String delimiter, boolean skipHeader, com.cadp.web.dto.CadpConfig config) throws Exception {
         // Update Config if provided
         if (config != null) {
             cadpClient.reconfigure(config.getHost(), config.getPort(), config.getToken(), config.getUserName());
         }
-        return processFile(file, mode, columnIndex, policy, delimiter, skipHeader);
+        return processFile(file, mode, columnIndices, policy, delimiter, skipHeader);
     }
 
-    public File processFile(MultipartFile file, String mode, int columnIndex, String policy, String delimiter, boolean skipHeader) throws Exception {
+    public File processFile(MultipartFile file, String mode, List<Integer> columnIndices, String policy, String delimiter, boolean skipHeader) throws Exception {
         // Create temp input and output files
         Path tempDir = Files.createTempDirectory("cadp_upload");
         File inputFile = tempDir.resolve(file.getOriginalFilename()).toFile();
@@ -104,21 +107,23 @@ public class FileProcessingService {
                 
                 futures.add(executor.submit(() -> {
                     String[] parts = currentLine.split(finalDelimiter, -1);
-                    if (parts.length > columnIndex) {
-                        try {
-                            String target = parts[columnIndex];
-                            String processed = target;
-                            
-                            if (target != null && !target.isEmpty()) {
-                                if ("protect".equalsIgnoreCase(mode)) {
-                                    processed = cadpClient.protect(target, policy);
-                                } else if ("reveal".equalsIgnoreCase(mode)) {
-                                    processed = cadpClient.reveal(target, policy);
+                    
+                    for (int columnIndex : columnIndices) {
+                        if (parts.length > columnIndex) {
+                            try {
+                                String target = parts[columnIndex];
+                                String processed = target;
+                                if (target != null && !target.isEmpty()) {
+                                    if ("protect".equalsIgnoreCase(mode)) {
+                                        processed = cadpClient.protect(target, policy);
+                                    } else if ("reveal".equalsIgnoreCase(mode)) {
+                                        processed = cadpClient.reveal(target, policy);
+                                    }
                                 }
+                                parts[columnIndex] = processed;
+                            } catch (Exception e) {
+                                parts[columnIndex] = "ERROR";
                             }
-                            parts[columnIndex] = processed;
-                        } catch (Exception e) {
-                            parts[columnIndex] = "ERROR: " + e.getMessage();
                         }
                     }
                     return String.join(finalDelimiter, parts);

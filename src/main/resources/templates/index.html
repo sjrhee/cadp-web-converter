@@ -228,7 +228,7 @@
 
     <script>
         let currentStep = 1;
-        let selectedColIndex = -1;
+        let selectedColIndices = [];
         let originalToken = "";
         let previewData = null;
 
@@ -246,8 +246,8 @@
 
         function goToStep(step) {
             // Validation
-            if (step === 3 && selectedColIndex === -1) {
-                alert("Please select a target column (click on the header).");
+            if (step === 3 && selectedColIndices.length === 0) {
+                alert("Please select at least one target column (click on the header).");
                 return;
             }
             if (step === 4) {
@@ -339,23 +339,29 @@
             });
 
             // Re-apply selection if exists
-            if (selectedColIndex !== -1) {
-                const headers = document.querySelectorAll('.clickable-header');
-                if (headers[selectedColIndex]) {
-                    headers[selectedColIndex].classList.add('selected');
+            const headers = document.querySelectorAll('.clickable-header');
+            selectedColIndices.forEach(idx => {
+                if (headers[idx]) {
+                    headers[idx].classList.add('selected');
                 }
-            }
+            });
         }
 
         function selectColumn(index, headerElement) {
-            selectedColIndex = index;
-            document.getElementById('targetColumnInput').value = index;
-            document.getElementById('selectedColIndex').innerText = index;
-            document.getElementById('step2NextBtn').disabled = false;
+            const idx = selectedColIndices.indexOf(index);
+            if (idx > -1) {
+                selectedColIndices.splice(idx, 1);
+                headerElement.classList.remove('selected');
+            } else {
+                selectedColIndices.push(index);
+                headerElement.classList.add('selected');
+            }
+            // Sort indices for display
+            selectedColIndices.sort((a, b) => a - b);
 
-            // Visual
-            document.querySelectorAll('.clickable-header').forEach(el => el.classList.remove('selected'));
-            headerElement.classList.add('selected');
+            document.getElementById('targetColumnInput').value = selectedColIndices.join(',');
+            document.getElementById('selectedColIndex').innerText = selectedColIndices.length > 0 ? selectedColIndices.join(', ') : '-';
+            document.getElementById('step2NextBtn').disabled = selectedColIndices.length === 0;
         }
 
         async function loadConfig() {
@@ -381,7 +387,7 @@
         function updateSummary() {
             document.getElementById('summaryFile').innerText = document.getElementById('fileInput').files[0].name;
             document.getElementById('summaryMode').innerText = document.querySelector('input[name="mode"]:checked').value.toUpperCase();
-            document.getElementById('summaryCol').innerText = selectedColIndex;
+            document.getElementById('summaryCol').innerText = selectedColIndices.join(', ');
             document.getElementById('summaryPolicy').innerText = document.getElementById('policyInput').value;
         }
 
@@ -393,7 +399,7 @@
             const formData = new FormData();
             formData.append("file", document.getElementById('fileInput').files[0]);
             formData.append("mode", document.querySelector('input[name="mode"]:checked').value);
-            formData.append("column", selectedColIndex);
+            formData.append("columns", selectedColIndices.join(',')); // Comma separated for List<Integer>
             formData.append("policy", document.getElementById('policyInput').value);
             formData.append("delimiter", document.getElementById('delimiterInput').value);
             formData.append("skipHeader", document.getElementById('skipHeaderCheck').checked);
