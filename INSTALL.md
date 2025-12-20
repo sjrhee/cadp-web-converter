@@ -42,8 +42,13 @@ CADP_POLICY=default_policy
 # 실행 권한 부여 (최초 1회)
 chmod +x build_and_run.sh stop.sh
 
-# 빌드 및 실행
+```bash
+# 실행 권한 부여 (최초 1회)
+chmod +x build_and_run.sh stop.sh
+
+# 빌드 및 백그라운드 실행
 ./build_and_run.sh
+# 로그 확인: tail -f server.log
 
 # 실행 중지
 ./stop.sh
