@@ -32,7 +32,7 @@ Thales CADP SDK를 사용하여 구분자가 있는 파일(CSV, TSV, TXT)을 일
    ```bash
    ./build_and_run.sh
    ```
-   실행 후 브라우저에서 `http://localhost:8088`으로 접속하세요.
+   실행 후 브라우저에서 `http://192.168.100.13:8088`으로 접속하세요.
 
 ## 사용 방법
 
