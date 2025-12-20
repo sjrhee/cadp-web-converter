@@ -7,7 +7,7 @@ import com.centralmanagement.RegisterClientParameters;
 import com.centralmanagement.policy.CryptoManager;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Value;
-import jakarta.annotation.PostConstruct;
+import javax.annotation.PostConstruct;
 
 import java.nio.charset.StandardCharsets;
 
