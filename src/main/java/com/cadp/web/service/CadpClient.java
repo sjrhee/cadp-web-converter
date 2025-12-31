@@ -30,14 +30,19 @@ public class CadpClient {
     private String defaultPolicyName;
 
     private boolean isInitialized = false;
+    private final java.util.concurrent.atomic.AtomicInteger errorCounter = new java.util.concurrent.atomic.AtomicInteger(
+            0);
+    private static final int MAX_ERRORS = 10;
 
     @PostConstruct
     public void init() {
         try {
-            if (keyManagerHost != null && !keyManagerHost.isEmpty() && registrationToken != null && !registrationToken.isEmpty()) {
+            if (keyManagerHost != null && !keyManagerHost.isEmpty() && registrationToken != null
+                    && !registrationToken.isEmpty()) {
                 registerClient(keyManagerHost, keyManagerPort, registrationToken);
                 isInitialized = true;
-                System.out.println("CADP Client initialized successfully. Host: " + keyManagerHost + ", Port: " + keyManagerPort);
+                System.out.println(
+                        "CADP Client initialized successfully. Host: " + keyManagerHost + ", Port: " + keyManagerPort);
             } else {
                 System.err.println("CADP Client initialization skipped: Missing configuration (Host or Token).");
             }
@@ -56,8 +61,9 @@ public class CadpClient {
         this.defaultUserName = userName;
         this.isInitialized = true;
     }
-    
-    private void registerClient(String keyManagerHost, String keyManagerPort, String registrationToken) throws Exception {
+
+    private void registerClient(String keyManagerHost, String keyManagerPort, String registrationToken)
+            throws Exception {
         RegisterClientParameters.Builder builder = new RegisterClientParameters.Builder(keyManagerHost,
                 registrationToken.toCharArray());
 
@@ -76,28 +82,68 @@ public class CadpClient {
     }
 
     public String protect(String plainText, String policyName) throws Exception {
-        if (!isInitialized) throw new IllegalStateException("CADP Client not initialized.");
-        if (plainText == null) return null;
+        if (!isInitialized)
+            throw new IllegalStateException("CADP Client not initialized.");
+        if (plainText == null)
+            return null;
 
-        CipherTextData cipherTextData = CryptoManager.protect(plainText.getBytes(StandardCharsets.UTF_8), policyName);
-        return new String(cipherTextData.getCipherText(), StandardCharsets.UTF_8);
+        try {
+            CipherTextData cipherTextData = CryptoManager.protect(plainText.getBytes(StandardCharsets.UTF_8),
+                    policyName);
+            errorCounter.set(0); // Reset on success
+            return new String(cipherTextData.getCipherText(), StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            handleError(e);
+            throw e;
+        }
     }
 
     public String reveal(String cipherText, String policyName) throws Exception {
-        if (!isInitialized) throw new IllegalStateException("CADP Client not initialized.");
-        if (cipherText == null) return null;
+        if (!isInitialized)
+            throw new IllegalStateException("CADP Client not initialized.");
+        if (cipherText == null)
+            return null;
 
         CipherTextData cipherTextData = new CipherTextData();
         cipherTextData.setCipherText(cipherText.getBytes(StandardCharsets.UTF_8));
 
-        byte[] revealedData = CryptoManager.reveal(cipherTextData, policyName, defaultUserName);
-        return new String(revealedData, StandardCharsets.UTF_8);
+        try {
+            byte[] revealedData = CryptoManager.reveal(cipherTextData, policyName, defaultUserName);
+            errorCounter.set(0); // Reset on success
+            return new String(revealedData, StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            handleError(e);
+            throw e;
+        }
     }
-    
+
     // Config Getters for UI
-    public String getKeyManagerHost() { return keyManagerHost; }
-    public String getKeyManagerPort() { return keyManagerPort; }
-    public String getRegistrationToken() { return registrationToken; }
-    public String getDefaultUserName() { return defaultUserName; }
-    public String getDefaultPolicyName() { return defaultPolicyName; }
+    public String getKeyManagerHost() {
+        return keyManagerHost;
+    }
+
+    public String getKeyManagerPort() {
+        return keyManagerPort;
+    }
+
+    public String getRegistrationToken() {
+        return registrationToken;
+    }
+
+    public String getDefaultUserName() {
+        return defaultUserName;
+    }
+
+    public String getDefaultPolicyName() {
+        return defaultPolicyName;
+    }
+
+    private void handleError(Exception e) {
+        int currentErrors = errorCounter.incrementAndGet();
+        System.err.println("Error occurred in CADP operation. Current consecutive errors: " + currentErrors);
+        if (currentErrors >= MAX_ERRORS) {
+            System.err.println("Too many consecutive errors (" + currentErrors + "). Shutting down application...");
+            System.exit(1);
+        }
+    }
 }

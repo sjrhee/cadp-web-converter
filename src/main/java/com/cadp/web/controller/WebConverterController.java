@@ -43,8 +43,7 @@ public class WebConverterController {
     @PostMapping("/api/preview")
     public ResponseEntity<com.cadp.web.dto.FilePreview> previewFile(
             @RequestParam("file") MultipartFile file,
-            @RequestParam(value = "delimiter", defaultValue = ",") String delimiter
-    ) {
+            @RequestParam(value = "delimiter", defaultValue = ",") String delimiter) {
         try {
             return ResponseEntity.ok(fileProcessingService.generatePreview(file, delimiter));
         } catch (Exception e) {
@@ -77,8 +76,7 @@ public class WebConverterController {
             @RequestParam(value = "confHost", required = false) String confHost,
             @RequestParam(value = "confPort", required = false) String confPort,
             @RequestParam(value = "confToken", required = false) String confToken,
-            @RequestParam(value = "confUser", required = false) String confUser
-    ) {
+            @RequestParam(value = "confUser", required = false) String confUser) {
         try {
             com.cadp.web.dto.CadpConfig config = null;
             if (confHost != null && !confHost.isEmpty()) {
@@ -89,40 +87,76 @@ public class WebConverterController {
                 config.setUserName(confUser);
             }
 
+            // Pre-flight check: Verify encryption/decryption with first row data (Step 3 ->
+            // 4)
+            String checkPolicy = (config != null && config.getPolicyName() != null && !config.getPolicyName().isEmpty())
+                    ? config.getPolicyName()
+                    : policy;
+            try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(file.getInputStream()))) {
+                String line = reader.readLine();
+                if (skipHeader && line != null) {
+                    line = reader.readLine(); // Skip header
+                }
+
+                if (line != null && !line.trim().isEmpty() && !columns.isEmpty()) {
+                    String[] parts = line.split(delimiter); // Use delimiter provided
+
+                    int targetCol = columns.get(0); // Check first target column
+                    if (targetCol < parts.length) {
+                        String sampleData = parts[targetCol];
+                        // Perform check based on mode
+                        if ("protect".equalsIgnoreCase(mode)) {
+                            cadpClient.protect(sampleData, checkPolicy);
+                        } else if ("reveal".equalsIgnoreCase(mode)) {
+                            cadpClient.reveal(sampleData, checkPolicy);
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                System.err.println("Pre-flight check failed: " + e.getMessage());
+                Map<String, String> error = new HashMap<>();
+                error.put("error",
+                        "Pre-flight check failed: Operation test with first data row failed. (" + e.getMessage() + ")");
+                return ResponseEntity.status(org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+            }
+
             // Start Timer
             long startTime = System.currentTimeMillis();
             java.time.LocalDateTime startDateTime = java.time.LocalDateTime.now();
 
-            File resultFile = fileProcessingService.processFileWithConfig(file, mode, columns, policy, delimiter, skipHeader, config);
-            
+            File resultFile = fileProcessingService.processFileWithConfig(file, mode, columns, policy, delimiter,
+                    skipHeader, config);
+
             // End Timer
             long endTime = System.currentTimeMillis();
             java.time.LocalDateTime endDateTime = java.time.LocalDateTime.now();
             java.time.Duration duration = java.time.Duration.between(startDateTime, endDateTime);
-            
+
             // Generate Download Token
             String token = UUID.randomUUID().toString();
             fileStore.put(token, resultFile);
-            
+
             Map<String, String> response = new HashMap<>();
             response.put("token", token);
             response.put("filename", resultFile.getName());
-            
-            java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
+            java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter
+                    .ofPattern("yyyy-MM-dd HH:mm:ss");
             response.put("startTime", startDateTime.format(formatter));
             response.put("endTime", endDateTime.format(formatter));
-            
+
             // Format duration in seconds
             double seconds = duration.toMillis() / 1000.0;
             response.put("duration", String.format("%.3f s", seconds));
 
             // Count lines
             try (java.util.stream.Stream<String> stream = java.nio.file.Files.lines(resultFile.toPath())) {
-                 long lineCount = stream.count();
-                 response.put("totalLines", String.valueOf(lineCount));
+                long lineCount = stream.count();
+                response.put("totalLines", String.valueOf(lineCount));
             }
             response.put("duration", String.format("%.3f s", seconds));
-            
+
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             e.printStackTrace();
@@ -164,16 +198,17 @@ public class WebConverterController {
             if (file == null || !file.exists()) {
                 return ResponseEntity.notFound().build();
             }
-            
+
             com.cadp.web.dto.FilePreview preview = new com.cadp.web.dto.FilePreview();
             preview.setFilename(file.getName());
             java.util.List<java.util.List<String>> rows = new java.util.ArrayList<>();
-            
+
             try (java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.FileReader(file))) {
                 String line;
                 int count = 0;
                 while ((line = reader.readLine()) != null && count < 8) {
-                    if (line.trim().isEmpty()) continue;
+                    if (line.trim().isEmpty())
+                        continue;
                     rows.add(java.util.Collections.singletonList(line));
                     count++;
                 }
