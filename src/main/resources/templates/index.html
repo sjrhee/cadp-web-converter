@@ -304,7 +304,14 @@
             }
 
             const formData = new FormData();
-            formData.append("file", fileInput.files[0]);
+            // Performance Optimization: Slice the file (header + first few lines only)
+            // 50KB should be enough for header + 8 lines even with very long lines
+            const CHUNK_SIZE = 50 * 1024;
+            const originalFile = fileInput.files[0];
+            const blob = originalFile.slice(0, CHUNK_SIZE);
+
+            // Append with original filename so backend can see the extension (csv/tsv) if needed
+            formData.append("file", blob, originalFile.name);
             formData.append("delimiter", document.getElementById('delimiterInput').value);
 
             try {
