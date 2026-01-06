@@ -181,10 +181,29 @@
                     </div>
 
                     <div id="processingStatus" class="d-none text-center py-5">
-                        <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
-                            <span class="visually-hidden">Loading...</span>
+                        <!-- Upload Progress -->
+                        <div id="uploadProgressContainer" class="mb-3">
+                            <label>Uploading to Server...</label>
+                            <div class="progress" style="height: 20px;">
+                                <div id="uploadProgressBar"
+                                    class="progress-bar progress-bar-striped progress-bar-animated bg-success"
+                                    role="progressbar" style="width: 0%">0%</div>
+                            </div>
                         </div>
-                        <h5 class="mt-3">Processing File... Please wait.</h5>
+
+                        <!-- Processing Status -->
+                        <div id="serverProcessingContainer" class="d-none">
+                            <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
+                                <span class="visually-hidden">Processing...</span>
+                            </div>
+                            <h5 class="mt-3">Processing File...</h5>
+                            <p class="lead">
+                                Processed: <span id="procLines" class="fw-bold">0</span>
+                                <span id="totalLinesContainer" class="d-none"> / <span id="procTotal">0</span></span>
+                            </p>
+                            <p class="text-danger" id="procErrorsContainer" style="display:none;">Errors: <span
+                                    id="procErrors">0</span></p>
+                        </div>
                     </div>
 
                     <div id="executionError" class="alert alert-danger d-none"></div>
@@ -204,10 +223,12 @@
                                 d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zm-3.97-3.03a.75.75 0 0 0-1.08.022L7.477 9.417 5.384 7.323a.75.75 0 0 0-1.06 1.06L6.97 11.03a.75.75 0 0 0 1.079-.02l3.992-4.99a.75.75 0 0 0-.01-1.05z" />
                         </svg>
                         <h2 class="mt-3">Processing Complete!</h2>
+
                         <div id="processingStats" class="alert alert-info mt-3 text-start d-inline-block px-4 d-none">
                             <p class="mb-1"><strong>Start Time:</strong> <span id="statStartTime">-</span></p>
                             <p class="mb-1"><strong>End Time:</strong> <span id="statEndTime">-</span></p>
                             <p class="mb-1"><strong>Lines:</strong> <span id="statLines">-</span></p>
+                            <p class="mb-1 text-danger"><strong>Errors:</strong> <span id="statErrors">0</span></p>
                             <p class="mb-0"><strong>Duration:</strong> <span id="statDuration">-</span></p>
                         </div>
                     </div>
@@ -232,15 +253,12 @@
         let selectedColIndices = [];
         let originalToken = "";
         let previewData = null;
+        let pollInterval = null;
 
         document.addEventListener('DOMContentLoaded', function () {
             document.getElementById('skipHeaderCheck').addEventListener('change', function () {
-                console.log("Checkbox changed. Checked:", this.checked);
                 if (previewData) {
-                    console.log("Re-rendering table with data:", previewData);
                     renderTable(previewData);
-                } else {
-                    console.log("No previewData available");
                 }
             });
         });
@@ -248,7 +266,7 @@
         function goToStep(step) {
             // Validation
             if (step === 3 && selectedColIndices.length === 0) {
-                alert("Please select at least one target column (click on the header).");
+                alert("Please select at least one target column.");
                 return;
             }
             if (step === 4) {
@@ -260,12 +278,12 @@
                 updateSummary();
             }
 
-            // Hide current
+            // Hide all steps
             document.querySelectorAll('.step-container').forEach(el => el.classList.remove('active'));
-            // Show next
+            // Show target step
             document.getElementById('step' + step).classList.add('active');
 
-            // Update Progress
+            // Update Wizard Progress
             const progress = step * 20;
             const bar = document.getElementById('progressBar');
             bar.style.width = progress + '%';
@@ -310,8 +328,6 @@
             if (!data.rows || data.rows.length === 0) return;
 
             const useHeader = document.getElementById('skipHeaderCheck').checked;
-            console.log("renderTable: useHeader =", useHeader);
-            console.log("renderTable: data.headers =", data.headers);
             const numCols = data.rows[0].length;
 
             // Header
@@ -339,7 +355,7 @@
                 tbody.innerHTML += tr;
             });
 
-            // Re-apply selection if exists
+            // Re-apply selection
             const headers = document.querySelectorAll('.clickable-header');
             selectedColIndices.forEach(idx => {
                 if (headers[idx]) {
@@ -357,7 +373,6 @@
                 selectedColIndices.push(index);
                 headerElement.classList.add('selected');
             }
-            // Sort indices for display
             selectedColIndices.sort((a, b) => a - b);
 
             document.getElementById('targetColumnInput').value = selectedColIndices.join(',');
@@ -370,15 +385,12 @@
                 const response = await fetch('/api/config');
                 const conf = await response.json();
 
-                // Populate only if empty (to avoid overwriting user edits on back navigation)
                 if (!document.getElementById('confHost').value) document.getElementById('confHost').value = conf.host || '';
                 if (!document.getElementById('confPort').value) document.getElementById('confPort').value = conf.port || '443';
                 if (!document.getElementById('confUser').value) document.getElementById('confUser').value = conf.userName || '';
                 if (!document.getElementById('policyInput').value) document.getElementById('policyInput').value = conf.policyName || '';
-
                 if (!document.getElementById('confToken').value) document.getElementById('confToken').value = conf.token || '';
 
-                // Keep token abstract (optional if we want to track original)
                 if (conf.token) originalToken = conf.token;
             } catch (e) {
                 console.error(e);
@@ -392,15 +404,20 @@
             document.getElementById('summaryPolicy').innerText = document.getElementById('policyInput').value;
         }
 
-        async function runProcess() {
+        function runProcess() {
             document.getElementById('step4Controls').classList.add('d-none');
             document.getElementById('processingStatus').classList.remove('d-none');
+            // Reset Progress UI
+            document.getElementById('uploadProgressContainer').classList.remove('d-none');
+            document.getElementById('uploadProgressBar').style.width = '0%';
+            document.getElementById('uploadProgressBar').innerText = '0%';
+            document.getElementById('serverProcessingContainer').classList.add('d-none');
             document.getElementById('executionError').classList.add('d-none');
 
             const formData = new FormData();
             formData.append("file", document.getElementById('fileInput').files[0]);
             formData.append("mode", document.querySelector('input[name="mode"]:checked').value);
-            formData.append("columns", selectedColIndices.join(',')); // Comma separated for List<Integer>
+            formData.append("columns", selectedColIndices.join(','));
             formData.append("policy", document.getElementById('policyInput').value);
             formData.append("delimiter", document.getElementById('delimiterInput').value);
             formData.append("skipHeader", document.getElementById('skipHeaderCheck').checked);
@@ -412,54 +429,107 @@
             const tokenVal = document.getElementById('confToken').value;
             if (tokenVal && tokenVal !== "******") {
                 formData.append("confToken", tokenVal);
-            } else {
-                // Pass existing token if not changed? Or backend re-uses it?
-                // Backend uses what is passed. If we want to use existing, we need to pass it or backend should fallback.
-                // Our current controller re-configures ONLY if params are passed. 
-                // If we want key re-use, we should fetch it or handle on backend.
-                // For safety, let's assume user must provide it if it's missing in env, 
-                // OR if we stored it in originalToken (masked returns ******), this is tricky.
-                // Best effort: if user didn't change it, assume Env var or existing state.
-                // Just don't send confToken if it is ******
             }
 
-            try {
-                const response = await fetch('/api/process', { method: 'POST', body: formData });
-                if (!response.ok) {
-                    const err = await response.json();
-                    throw new Error(err.error || "Processing failed");
+            // Use XMLHttpRequest for Upload Progress
+            const xhr = new XMLHttpRequest();
+            xhr.open("POST", "/api/process");
+
+            xhr.upload.onprogress = function (e) {
+                if (e.lengthComputable) {
+                    const percentComplete = Math.round((e.loaded / e.total) * 100);
+                    const bar = document.getElementById('uploadProgressBar');
+                    bar.style.width = percentComplete + '%';
+                    bar.innerText = percentComplete + '%';
                 }
+            };
 
-                const result = await response.json();
-                showResult(result.token, result.filename, result.startTime, result.endTime, result.duration, result.totalLines);
+            xhr.onload = function () {
+                if (xhr.status === 200) {
+                    const result = JSON.parse(xhr.responseText);
+                    startPolling(result.jobId);
+                } else {
+                    let errMsg = "Processing failed";
+                    try {
+                        const err = JSON.parse(xhr.responseText);
+                        errMsg = err.error || errMsg;
+                    } catch (e) { }
+                    showError(errMsg);
+                }
+            };
 
-            } catch (e) {
-                document.getElementById('executionError').innerText = "Error: " + e.message;
-                document.getElementById('executionError').classList.remove('d-none');
-                document.getElementById('step4Controls').classList.remove('d-none');
-                document.getElementById('processingStatus').classList.add('d-none');
-            }
+            xhr.onerror = function () {
+                showError("Network Error");
+            };
+
+            xhr.send(formData);
         }
 
-        async function showResult(token, filename, start, end, duration, lines) {
-            goToStep(5);
-            document.getElementById('downloadLink').href = `/api/download/${token}`;
+        function startPolling(jobId) {
+            // Switch UI to Processing mode
+            document.getElementById('uploadProgressContainer').classList.add('d-none');
+            document.getElementById('serverProcessingContainer').classList.remove('d-none');
 
-            if (start && end && duration) {
-                document.getElementById('statStartTime').innerText = start;
-                document.getElementById('statEndTime').innerText = end;
-                document.getElementById('statDuration').innerText = duration;
-                if (lines) document.getElementById('statLines').innerText = lines;
-                document.getElementById('processingStats').classList.remove('d-none');
-            }
+            pollInterval = setInterval(async () => {
+                try {
+                    const res = await fetch(`/api/status/${jobId}`);
+                    if (!res.ok) throw new Error("Status check failed");
+
+                    const status = await res.json();
+
+                    // Update Status UI
+                    document.getElementById('procLines').innerText = status.processedLines;
+                    if (status.totalLines > 0) {
+                        document.getElementById('procTotal').innerText = status.totalLines;
+                        document.getElementById('totalLinesContainer').classList.remove('d-none');
+                    }
+
+                    if (status.errorCount > 0) {
+                        document.getElementById('procErrors').innerText = status.errorCount;
+                        document.getElementById('procErrorsContainer').style.display = 'block';
+                    }
+
+                    if (status.status === 'COMPLETED') {
+                        clearInterval(pollInterval);
+                        showResult(status);
+                    } else if (status.status === 'FAILED') {
+                        clearInterval(pollInterval);
+                        showError(status.errorMessage || "Processing failed on server.");
+                    }
+                } catch (e) {
+                    console.error("Polling error", e);
+                    // Don't stop immediately on network glitch, maybe count errors?
+                }
+            }, 1000); // Poll every 1 second
+        }
+
+        function showError(msg) {
+            document.getElementById('executionError').innerText = "Error: " + msg;
+            document.getElementById('executionError').classList.remove('d-none');
+            document.getElementById('step4Controls').classList.remove('d-none');
+            document.getElementById('processingStatus').classList.add('d-none');
+        }
+
+        async function showResult(jobStatus) {
+            goToStep(5);
+            document.getElementById('downloadLink').href = `/api/download/${jobStatus.resultToken}`;
+
+            document.getElementById('statStartTime').innerText = jobStatus.startTime;
+            document.getElementById('statEndTime').innerText = jobStatus.endTime;
+            document.getElementById('statDuration').innerText = jobStatus.duration;
+            document.getElementById('statLines').innerText = jobStatus.processedLines;
+            document.getElementById('statErrors').innerText = jobStatus.errorCount;
+            document.getElementById('processingStats').classList.remove('d-none');
 
             // Fetch preview
             try {
-                const res = await fetch(`/api/preview-result/${token}`);
+                const res = await fetch(`/api/preview-result/${jobStatus.resultToken}`);
                 const preview = await res.json();
 
                 let content = "";
-                preview.rows.forEach(r => content += r + "\n");
+                if (preview.rows) {
+                    preview.rows.forEach(r => content += r + "\n");
+                }
                 document.getElementById('resultPreviewContent').innerText = content;
             } catch (e) {
                 document.getElementById('resultPreviewContent').innerText = "Preview unavailable.";

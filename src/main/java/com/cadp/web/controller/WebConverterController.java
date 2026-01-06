@@ -63,7 +63,7 @@ public class WebConverterController {
         return ResponseEntity.ok(config);
     }
 
-    // Step 4: Process
+    // Step 4: Process (Async)
     @PostMapping("/api/process")
     public ResponseEntity<Map<String, String>> processFile(
             @RequestParam("file") MultipartFile file,
@@ -87,8 +87,7 @@ public class WebConverterController {
                 config.setUserName(confUser);
             }
 
-            // Pre-flight check: Verify encryption/decryption with first row data (Step 3 ->
-            // 4)
+            // Pre-flight check
             String checkPolicy = (config != null && config.getPolicyName() != null && !config.getPolicyName().isEmpty())
                     ? config.getPolicyName()
                     : policy;
@@ -96,13 +95,13 @@ public class WebConverterController {
                     new java.io.InputStreamReader(file.getInputStream()))) {
                 String line = reader.readLine();
                 if (skipHeader && line != null) {
-                    line = reader.readLine(); // Skip header
+                    line = reader.readLine();
                 }
 
                 if (line != null && !line.trim().isEmpty() && !columns.isEmpty()) {
-                    String[] parts = line.split(delimiter); // Use delimiter provided
+                    String[] parts = line.split(delimiter);
 
-                    int targetCol = columns.get(0); // Check first target column
+                    int targetCol = columns.get(0);
                     if (targetCol < parts.length) {
                         String sampleData = parts[targetCol];
                         // Perform check based on mode
@@ -114,67 +113,48 @@ public class WebConverterController {
                     }
                 }
             } catch (Exception e) {
-                System.err.println("Pre-flight check failed: " + e.getMessage());
                 Map<String, String> error = new HashMap<>();
                 error.put("error",
-                        "Pre-flight check failed: Operation test with first data row failed. (" + e.getMessage() + ")");
+                        "Pre-flight check failed: (" + e.getMessage() + ")");
                 return ResponseEntity.status(org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR).body(error);
             }
 
-            // Start Timer
-            long startTime = System.currentTimeMillis();
-            java.time.LocalDateTime startDateTime = java.time.LocalDateTime.now();
-
-            File resultFile = fileProcessingService.processFileWithConfig(file, mode, columns, policy, delimiter,
-                    skipHeader, config);
-
-            // End Timer
-            long endTime = System.currentTimeMillis();
-            java.time.LocalDateTime endDateTime = java.time.LocalDateTime.now();
-            java.time.Duration duration = java.time.Duration.between(startDateTime, endDateTime);
-
-            // Generate Download Token
-            String token = UUID.randomUUID().toString();
-            fileStore.put(token, resultFile);
+            // Start Async Job
+            String jobId = fileProcessingService.processFileAsync(file, mode, columns, policy, delimiter, skipHeader,
+                    config);
 
             Map<String, String> response = new HashMap<>();
-            response.put("token", token);
-            response.put("filename", resultFile.getName());
-
-            java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter
-                    .ofPattern("yyyy-MM-dd HH:mm:ss");
-            response.put("startTime", startDateTime.format(formatter));
-            response.put("endTime", endDateTime.format(formatter));
-
-            // Format duration in seconds
-            double seconds = duration.toMillis() / 1000.0;
-            response.put("duration", String.format("%.3f s", seconds));
-
-            // Count lines
-            try (java.util.stream.Stream<String> stream = java.nio.file.Files.lines(resultFile.toPath())) {
-                long lineCount = stream.count();
-                response.put("totalLines", String.valueOf(lineCount));
-            }
-            response.put("duration", String.format("%.3f s", seconds));
-
+            response.put("jobId", jobId);
+            response.put("status", "UPLOADING");
             return ResponseEntity.ok(response);
+
         } catch (Exception e) {
             e.printStackTrace();
             Map<String, String> error = new HashMap<>();
-            String msg = e.getMessage();
-            if (msg == null) {
-                msg = "Unknown error occurred (" + e.getClass().getSimpleName() + ")";
-            }
-            error.put("error", msg);
+            error.put("error", e.getMessage());
             return ResponseEntity.internalServerError().body(error);
         }
+    }
+
+    @GetMapping("/api/status/{jobId}")
+    public ResponseEntity<com.cadp.web.dto.JobStatus> getJobStatus(@PathVariable("jobId") String jobId) {
+        com.cadp.web.dto.JobStatus status = fileProcessingService.getJobStatus(jobId);
+        if (status == null) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(status);
     }
 
     // Step 5: Download
     @GetMapping("/api/download/{token}")
     public ResponseEntity<InputStreamResource> downloadFile(@PathVariable("token") String token) {
         try {
+            // Check local store first (legacy), then service store
             File file = fileStore.get(token);
+            if (file == null) {
+                file = fileProcessingService.getResultFile(token);
+            }
+
             if (file == null || !file.exists()) {
                 return ResponseEntity.notFound().build();
             }
@@ -195,6 +175,9 @@ public class WebConverterController {
     public ResponseEntity<com.cadp.web.dto.FilePreview> previewResult(@PathVariable("token") String token) {
         try {
             File file = fileStore.get(token);
+            if (file == null) {
+                file = fileProcessingService.getResultFile(token);
+            }
             if (file == null || !file.exists()) {
                 return ResponseEntity.notFound().build();
             }
