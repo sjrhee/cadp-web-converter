@@ -208,6 +208,21 @@
 
                     <div id="executionError" class="alert alert-danger d-none"></div>
 
+                    <!-- Thread Configuration -->
+                    <div class="row mb-3 align-items-center justify-content-end">
+                        <div class="col-auto">
+                            <label for="threadCountInput" class="col-form-label fw-bold">Threads:</label>
+                        </div>
+                        <div class="col-auto">
+                            <input type="number" id="threadCountInput" class="form-control" value="4" min="1" max="128"
+                                style="width: 80px;">
+                        </div>
+                        <div class="col-auto">
+                            <span class="text-muted small" data-bs-toggle="tooltip"
+                                title="Higher threads usage increases CPU load but may speed up processing. Default is 4.">(Info)</span>
+                        </div>
+                    </div>
+
                     <div class="mt-4 d-flex justify-content-between" id="step4Controls">
                         <button class="btn btn-outline-secondary" onclick="goToStep(3)">Back</button>
                         <button class="btn btn-success" onclick="runProcess()">Run Processing</button>
@@ -437,6 +452,9 @@
             if (tokenVal && tokenVal !== "******") {
                 formData.append("confToken", tokenVal);
             }
+
+            // Thread Count
+            formData.append("threadCount", document.getElementById('threadCountInput').value);
 
             // Use XMLHttpRequest for Upload Progress
             const xhr = new XMLHttpRequest();

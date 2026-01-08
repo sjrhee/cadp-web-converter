@@ -191,7 +191,8 @@ public class FileProcessingService {
 
     // Async Processing Method
     public String processFileAsync(MultipartFile file, String mode, List<Integer> columnIndices, String policy,
-            String delimiter, boolean skipHeader, com.cadp.web.dto.CadpConfig config) throws Exception {
+            String delimiter, boolean skipHeader, com.cadp.web.dto.CadpConfig config, int threadCount)
+            throws Exception {
 
         if (config != null) {
             cadpClient.reconfigure(config.getHost(), config.getPort(), config.getToken(), config.getUserName());
@@ -220,7 +221,8 @@ public class FileProcessingService {
             long startTimeMillis = System.currentTimeMillis();
 
             try {
-                processFileInternal(inputFile, outputFile, mode, columnIndices, policy, delimiter, skipHeader, job);
+                processFileInternal(inputFile, outputFile, mode, columnIndices, policy, delimiter, skipHeader, job,
+                        threadCount);
 
                 long endTimeMillis = System.currentTimeMillis();
                 job.setStatus("COMPLETED");
@@ -250,9 +252,10 @@ public class FileProcessingService {
 
     private void processFileInternal(File inputFile, File outputFile, String mode, List<Integer> columnIndices,
             String policy,
-            String delimiter, boolean skipHeader, com.cadp.web.dto.JobStatus job) throws Exception {
+            String delimiter, boolean skipHeader, com.cadp.web.dto.JobStatus job, int threadCount) throws Exception {
 
-        int threadCount = 8;
+        if (threadCount < 1)
+            threadCount = 4;
         int chunkSize = 1000;
 
         java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newFixedThreadPool(threadCount);

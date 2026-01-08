@@ -76,7 +76,8 @@ public class WebConverterController {
             @RequestParam(value = "confHost", required = false) String confHost,
             @RequestParam(value = "confPort", required = false) String confPort,
             @RequestParam(value = "confToken", required = false) String confToken,
-            @RequestParam(value = "confUser", required = false) String confUser) {
+            @RequestParam(value = "confUser", required = false) String confUser,
+            @RequestParam(value = "threadCount", defaultValue = "4") int threadCount) {
         try {
             com.cadp.web.dto.CadpConfig config = null;
             if (confHost != null && !confHost.isEmpty()) {
@@ -121,7 +122,7 @@ public class WebConverterController {
 
             // Start Async Job
             String jobId = fileProcessingService.processFileAsync(file, mode, columns, policy, delimiter, skipHeader,
-                    config);
+                    config, threadCount);
 
             Map<String, String> response = new HashMap<>();
             response.put("jobId", jobId);
